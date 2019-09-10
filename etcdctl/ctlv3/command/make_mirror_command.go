@@ -43,6 +43,7 @@ var (
 	mmIgnorePrefixFile string
 	mmOnetimeSync      bool
 	mmDryRun           bool
+	mmSyncUpdate       bool
 )
 
 // NewMakeMirrorCommand returns the cobra command for "makeMirror".
@@ -64,6 +65,7 @@ func NewMakeMirrorCommand() *cobra.Command {
 	c.Flags().StringVar(&mmIgnorePrefixFile, "ignore-prefix-file", "", "The file path which contain all paths need ignore")
 	c.Flags().BoolVar(&mmOnetimeSync, "one-time-sync", false, "If true. Just sync one time")
 	c.Flags().BoolVar(&mmDryRun, "dry-run", false, "Dry Run")
+	c.Flags().BoolVar(&mmSyncUpdate, "sync-update", false, "Do not sync base. Just sync update.")
 
 	return c
 }
@@ -142,6 +144,7 @@ func makeMirror(ctx context.Context, c *clientv3.Client, dc *clientv3.Client) er
 
 	s := mirror.NewSyncer(c, mmprefix, 0)
 
+	prefixes := getIgnorePrefixes()
 	rc, errc := s.SyncBase(ctx)
 
 	// if destination prefix is specified and remove destination prefix is true return error
@@ -154,8 +157,10 @@ func makeMirror(ctx context.Context, c *clientv3.Client, dc *clientv3.Client) er
 		mmdestprefix = mmprefix
 	}
 
-	prefixes := getIgnorePrefixes()
 	for r := range rc {
+		if mmSyncUpdate == true {
+			continue
+		}
 		for _, kv := range r.Kvs {
 			if isIgnore(string(kv.Key), prefixes) == true {
 				fmt.Printf("Ignore key: %s\n", string(kv.Key))
@@ -181,6 +186,7 @@ func makeMirror(ctx context.Context, c *clientv3.Client, dc *clientv3.Client) er
 		return nil
 	}
 
+	fmt.Println("Start Sycn update")
 	wc := s.SyncUpdates(ctx)
 
 	for wr := range wc {

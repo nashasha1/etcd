@@ -113,8 +113,8 @@ func getIgnorePrefixes() []string {
 		if len(prefix) == 0 {
 			continue
 		}
-		fmt.Println(prefixes)
-		prefixes = append(prefixes)
+		fmt.Println(prefix)
+		prefixes = append(prefixes, prefix)
 	}
 	return prefixes
 }

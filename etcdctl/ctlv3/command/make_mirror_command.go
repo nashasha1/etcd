@@ -15,9 +15,11 @@
 package command
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -31,13 +33,15 @@ import (
 )
 
 var (
-	mminsecureTr   bool
-	mmcert         string
-	mmkey          string
-	mmcacert       string
-	mmprefix       string
-	mmdestprefix   string
-	mmnodestprefix bool
+	mminsecureTr       bool
+	mmcert             string
+	mmkey              string
+	mmcacert           string
+	mmprefix           string
+	mmdestprefix       string
+	mmnodestprefix     bool
+	mmIgnorePrefixFile string
+	mmOnetimeSync      bool
 )
 
 // NewMakeMirrorCommand returns the cobra command for "makeMirror".
@@ -56,6 +60,8 @@ func NewMakeMirrorCommand() *cobra.Command {
 	c.Flags().StringVar(&mmcacert, "dest-cacert", "", "Verify certificates of TLS enabled secure servers using this CA bundle")
 	// TODO: secure by default when etcd enables secure gRPC by default.
 	c.Flags().BoolVar(&mminsecureTr, "dest-insecure-transport", true, "Disable transport security for client connections")
+	c.Flags().StringVar(&mmIgnorePrefixFile, "ignore-prefix-file", "", "The file path which contain all paths need ignore")
+	c.Flags().BoolVar(&mmOnetimeSync, "one-time-sync", false, "If true. Just sync one time")
 
 	return c
 }
@@ -90,6 +96,30 @@ func makeMirrorCommandFunc(cmd *cobra.Command, args []string) {
 	ExitWithError(ExitError, err)
 }
 
+func getIgnorePrefixes() []string {
+	var prefixes []string
+	file, err := os.Open(mmIgnorePrefixFile)
+	if err != nil {
+		ExitWithError(ExitBadArgs, fmt.Errorf("read ignore prefix file fail.", "error: ", err.Error(), "path: ", mmIgnorePrefixFile))
+	}
+	defer file.Close()
+	scaner := bufio.NewScanner(file)
+	for scaner.Scan() {
+		prefixes = append(prefixes, strings.TrimSpace(scaner.Text()))
+	}
+	return prefixes
+}
+
+func isIgnore(path string) bool {
+	prefixes := getIgnorePrefixes()
+	for _, prefix := range prefixes {
+		if strings.HasPrefix(path, prefix) == true {
+			return true
+		}
+	}
+	return false
+}
+
 func makeMirror(ctx context.Context, c *clientv3.Client, dc *clientv3.Client) error {
 	total := int64(0)
 
@@ -116,6 +146,10 @@ func makeMirror(ctx context.Context, c *clientv3.Client, dc *clientv3.Client) er
 
 	for r := range rc {
 		for _, kv := range r.Kvs {
+			if isIgnore(string(kv.Key)) == true {
+				fmt.Printf("Ignore key: %s", string(kv.Key))
+				continue
+			}
 			_, err := dc.Put(ctx, modifyPrefix(string(kv.Key)), string(kv.Value))
 			if err != nil {
 				return err
@@ -127,6 +161,10 @@ func makeMirror(ctx context.Context, c *clientv3.Client, dc *clientv3.Client) er
 	err := <-errc
 	if err != nil {
 		return err
+	}
+	if mmOnetimeSync == true {
+		fmt.Println("Sync one time finish.")
+		return nil
 	}
 
 	wc := s.SyncUpdates(ctx)

@@ -177,7 +177,7 @@ func makeMirror(ctx context.Context, c *clientv3.Client, dc *clientv3.Client) er
 		return err
 	}
 	if mmOnetimeSync == true {
-		fmt.Printf("Sync one time finish. Synced %d resources.", atomic.LoadInt64(&total))
+		fmt.Printf("Sync one time finish. Synced %d resources.\n", atomic.LoadInt64(&total))
 		return nil
 	}
 
@@ -200,6 +200,13 @@ func makeMirror(ctx context.Context, c *clientv3.Client, dc *clientv3.Client) er
 				}
 				ops = []clientv3.Op{}
 			}
+
+			if isIgnore(string(ev.Kv.Key), prefixes) == true {
+				fmt.Printf("Ignore key: %s\n", string(ev.Kv.Key))
+				continue
+			}
+			fmt.Printf("Sync key: %s\n", string(ev.Kv.Key))
+
 			lastRev = nextRev
 			switch ev.Type {
 			case mvccpb.PUT:

@@ -107,8 +107,14 @@ func getIgnorePrefixes() []string {
 	}
 	defer file.Close()
 	scaner := bufio.NewScanner(file)
+	fmt.Println("****************ALL IGNORE PREFIX...****************")
 	for scaner.Scan() {
-		prefixes = append(prefixes, strings.TrimSpace(scaner.Text()))
+		prefix := strings.TrimSpace(scaner.Text())
+		if len(prefix) == 0 {
+			continue
+		}
+		fmt.Println(prefixes)
+		prefixes = append(prefixes)
 	}
 	return prefixes
 }

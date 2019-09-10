@@ -42,6 +42,7 @@ var (
 	mmnodestprefix     bool
 	mmIgnorePrefixFile string
 	mmOnetimeSync      bool
+	mmDryRun           bool
 )
 
 // NewMakeMirrorCommand returns the cobra command for "makeMirror".
@@ -62,6 +63,7 @@ func NewMakeMirrorCommand() *cobra.Command {
 	c.Flags().BoolVar(&mminsecureTr, "dest-insecure-transport", true, "Disable transport security for client connections")
 	c.Flags().StringVar(&mmIgnorePrefixFile, "ignore-prefix-file", "", "The file path which contain all paths need ignore")
 	c.Flags().BoolVar(&mmOnetimeSync, "one-time-sync", false, "If true. Just sync one time")
+	c.Flags().BoolVar(&mmDryRun, "dry-run", false, "Dry Run")
 
 	return c
 }
@@ -119,8 +121,7 @@ func getIgnorePrefixes() []string {
 	return prefixes
 }
 
-func isIgnore(path string) bool {
-	prefixes := getIgnorePrefixes()
+func isIgnore(path string, prefixes []string) bool {
 	for _, prefix := range prefixes {
 		if strings.HasPrefix(path, prefix) == true {
 			return true
@@ -153,16 +154,19 @@ func makeMirror(ctx context.Context, c *clientv3.Client, dc *clientv3.Client) er
 		mmdestprefix = mmprefix
 	}
 
+	prefixes := getIgnorePrefixes()
 	for r := range rc {
 		for _, kv := range r.Kvs {
-			if isIgnore(string(kv.Key)) == true {
+			if isIgnore(string(kv.Key), prefixes) == true {
 				fmt.Printf("Ignore key: %s\n", string(kv.Key))
 				continue
 			}
 			fmt.Printf("Sync key: %s\n", string(kv.Key))
-			_, err := dc.Put(ctx, modifyPrefix(string(kv.Key)), string(kv.Value))
-			if err != nil {
-				return err
+			if mmDryRun == false {
+				_, err := dc.Put(ctx, modifyPrefix(string(kv.Key)), string(kv.Value))
+				if err != nil {
+					return err
+				}
 			}
 			atomic.AddInt64(&total, 1)
 		}
@@ -173,7 +177,7 @@ func makeMirror(ctx context.Context, c *clientv3.Client, dc *clientv3.Client) er
 		return err
 	}
 	if mmOnetimeSync == true {
-		fmt.Println("Sync one time finish.")
+		fmt.Printf("Sync one time finish. Synced %d resources.", atomic.LoadInt64(&total))
 		return nil
 	}
 

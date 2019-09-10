@@ -93,6 +93,9 @@ func makeMirrorCommandFunc(cmd *cobra.Command, args []string) {
 	c := mustClientFromCmd(cmd)
 
 	err := makeMirror(context.TODO(), c, dc)
+	if err == nil {
+		return
+	}
 	ExitWithError(ExitError, err)
 }
 
@@ -147,9 +150,10 @@ func makeMirror(ctx context.Context, c *clientv3.Client, dc *clientv3.Client) er
 	for r := range rc {
 		for _, kv := range r.Kvs {
 			if isIgnore(string(kv.Key)) == true {
-				fmt.Printf("Ignore key: %s", string(kv.Key))
+				fmt.Printf("Ignore key: %s\n", string(kv.Key))
 				continue
 			}
+			fmt.Printf("Sync key: %s\n", string(kv.Key))
 			_, err := dc.Put(ctx, modifyPrefix(string(kv.Key)), string(kv.Value))
 			if err != nil {
 				return err

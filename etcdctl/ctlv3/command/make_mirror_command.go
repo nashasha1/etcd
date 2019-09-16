@@ -41,6 +41,7 @@ var (
 	mmdestprefix       string
 	mmnodestprefix     bool
 	mmIgnorePrefixFile string
+	mmIgnoreEqualFile  string
 	mmOnetimeSync      bool
 	mmDryRun           bool
 	mmSyncUpdate       bool
@@ -62,7 +63,8 @@ func NewMakeMirrorCommand() *cobra.Command {
 	c.Flags().StringVar(&mmcacert, "dest-cacert", "", "Verify certificates of TLS enabled secure servers using this CA bundle")
 	// TODO: secure by default when etcd enables secure gRPC by default.
 	c.Flags().BoolVar(&mminsecureTr, "dest-insecure-transport", true, "Disable transport security for client connections")
-	c.Flags().StringVar(&mmIgnorePrefixFile, "ignore-prefix-file", "", "The file path which contain all paths need ignore")
+	c.Flags().StringVar(&mmIgnorePrefixFile, "ignore-prefix-file", "", "The file path which contain all prefix paths need ignore")
+	c.Flags().StringVar(&mmIgnoreEqualFile, "ignore-equal-file", "", "The file path which contain all equal paths need ignore")
 	c.Flags().BoolVar(&mmOnetimeSync, "one-time-sync", false, "If true. Just sync one time")
 	c.Flags().BoolVar(&mmDryRun, "dry-run", false, "Dry Run")
 	c.Flags().BoolVar(&mmSyncUpdate, "sync-update", false, "Do not sync base. Just sync update.")
@@ -103,29 +105,38 @@ func makeMirrorCommandFunc(cmd *cobra.Command, args []string) {
 	ExitWithError(ExitError, err)
 }
 
-func getIgnorePrefixes() []string {
-	var prefixes []string
-	file, err := os.Open(mmIgnorePrefixFile)
+func getIgnorePaths(filepath string) []string {
+	var paths []string
+	file, err := os.Open(filepath)
 	if err != nil {
-		ExitWithError(ExitBadArgs, fmt.Errorf("read ignore prefix file fail.", "error: ", err.Error(), "path: ", mmIgnorePrefixFile))
+		ExitWithError(ExitBadArgs, fmt.Errorf("read file fail.", "error: ", err.Error(), "path: ", filepath))
 	}
 	defer file.Close()
 	scaner := bufio.NewScanner(file)
 	fmt.Println("****************ALL IGNORE PREFIX...****************")
 	for scaner.Scan() {
-		prefix := strings.TrimSpace(scaner.Text())
-		if len(prefix) == 0 {
+		path := strings.TrimSpace(scaner.Text())
+		if len(path) == 0 {
 			continue
 		}
-		fmt.Println(prefix)
-		prefixes = append(prefixes, prefix)
+		fmt.Println(path)
+		paths = append(paths, path)
 	}
-	return prefixes
+	return paths
 }
 
-func isIgnore(path string, prefixes []string) bool {
+func isPrefixIgnore(path string, prefixes []string) bool {
 	for _, prefix := range prefixes {
 		if strings.HasPrefix(path, prefix) == true {
+			return true
+		}
+	}
+	return false
+}
+
+func isEqualIgnore(path string, paths []string) bool {
+	for _, p := range paths {
+		if p == path {
 			return true
 		}
 	}
@@ -144,7 +155,8 @@ func makeMirror(ctx context.Context, c *clientv3.Client, dc *clientv3.Client) er
 
 	s := mirror.NewSyncer(c, mmprefix, 0)
 
-	prefixes := getIgnorePrefixes()
+	prefixes := getIgnorePaths(mmIgnorePrefixFile)
+	equalPaths := getIgnorePaths(mmIgnoreEqualFile)
 	rc, errc := s.SyncBase(ctx)
 
 	// if destination prefix is specified and remove destination prefix is true return error
@@ -162,10 +174,16 @@ func makeMirror(ctx context.Context, c *clientv3.Client, dc *clientv3.Client) er
 			continue
 		}
 		for _, kv := range r.Kvs {
-			if isIgnore(string(kv.Key), prefixes) == true {
-				fmt.Printf("Ignore key: %s\n", string(kv.Key))
+			if isPrefixIgnore(string(kv.Key), prefixes) == true {
+				fmt.Printf("Ignore prefix key: %s\n", string(kv.Key))
 				continue
 			}
+
+			if isEqualIgnore(string(kv.Key), equalPaths) == true {
+				fmt.Printf("Ignore equal key: %s\n", string(kv.Key))
+				continue
+			}
+
 			fmt.Printf("Sync key: %s\n", string(kv.Key))
 			if mmDryRun == false {
 				_, err := dc.Put(ctx, modifyPrefix(string(kv.Key)), string(kv.Value))
@@ -207,10 +225,16 @@ func makeMirror(ctx context.Context, c *clientv3.Client, dc *clientv3.Client) er
 				ops = []clientv3.Op{}
 			}
 
-			if isIgnore(string(ev.Kv.Key), prefixes) == true {
+			if isPrefixIgnore(string(ev.Kv.Key), prefixes) == true {
 				fmt.Printf("Ignore key: %s\n", string(ev.Kv.Key))
 				continue
 			}
+
+			if isEqualIgnore(string(ev.Kv.Key), equalPaths) == true {
+				fmt.Printf("Ignore equal key: %s\n", string(ev.Kv.Key))
+				continue
+			}
+
 			fmt.Printf("Sync key: %s\n", string(ev.Kv.Key))
 
 			lastRev = nextRev

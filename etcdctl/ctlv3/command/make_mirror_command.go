@@ -107,6 +107,9 @@ func makeMirrorCommandFunc(cmd *cobra.Command, args []string) {
 
 func getIgnorePaths(filepath string) []string {
 	var paths []string
+        if len(filepath) == 0 {
+                return paths
+        }
 	file, err := os.Open(filepath)
 	if err != nil {
 		ExitWithError(ExitBadArgs, fmt.Errorf("read file fail.", "error: ", err.Error(), "path: ", filepath))

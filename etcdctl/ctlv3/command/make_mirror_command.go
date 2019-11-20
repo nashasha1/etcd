@@ -42,6 +42,7 @@ var (
 	mmnodestprefix     bool
 	mmIgnorePrefixFile string
 	mmIgnoreEqualFile  string
+	mmSyncEqualFile    string
 	mmOnetimeSync      bool
 	mmDryRun           bool
 	mmSyncUpdate       bool
@@ -65,6 +66,7 @@ func NewMakeMirrorCommand() *cobra.Command {
 	c.Flags().BoolVar(&mminsecureTr, "dest-insecure-transport", true, "Disable transport security for client connections")
 	c.Flags().StringVar(&mmIgnorePrefixFile, "ignore-prefix-file", "", "The file path which contain all prefix paths need ignore")
 	c.Flags().StringVar(&mmIgnoreEqualFile, "ignore-equal-file", "", "The file path which contain all equal paths need ignore")
+	c.Flags().StringVar(&mmSyncEqualFile, "sync-equal-file", "", "The file path which contain all equal paths need sync")
 	c.Flags().BoolVar(&mmOnetimeSync, "one-time-sync", false, "If true. Just sync one time")
 	c.Flags().BoolVar(&mmDryRun, "dry-run", false, "Dry Run")
 	c.Flags().BoolVar(&mmSyncUpdate, "sync-update", false, "Do not sync base. Just sync update.")
@@ -105,11 +107,11 @@ func makeMirrorCommandFunc(cmd *cobra.Command, args []string) {
 	ExitWithError(ExitError, err)
 }
 
-func getIgnorePaths(filepath string) []string {
+func getPaths(filepath string) []string {
 	var paths []string
-        if len(filepath) == 0 {
-                return paths
-        }
+	if len(filepath) == 0 {
+		return paths
+	}
 	file, err := os.Open(filepath)
 	if err != nil {
 		ExitWithError(ExitBadArgs, fmt.Errorf("read file fail.", "error: ", err.Error(), "path: ", filepath))
@@ -128,7 +130,7 @@ func getIgnorePaths(filepath string) []string {
 	return paths
 }
 
-func isPrefixIgnore(path string, prefixes []string) bool {
+func isPrefix(path string, prefixes []string) bool {
 	for _, prefix := range prefixes {
 		if strings.HasPrefix(path, prefix) == true {
 			return true
@@ -137,7 +139,7 @@ func isPrefixIgnore(path string, prefixes []string) bool {
 	return false
 }
 
-func isEqualIgnore(path string, paths []string) bool {
+func isEqual(path string, paths []string) bool {
 	for _, p := range paths {
 		if p == path {
 			return true
@@ -158,8 +160,9 @@ func makeMirror(ctx context.Context, c *clientv3.Client, dc *clientv3.Client) er
 
 	s := mirror.NewSyncer(c, mmprefix, 0)
 
-	prefixes := getIgnorePaths(mmIgnorePrefixFile)
-	equalPaths := getIgnorePaths(mmIgnoreEqualFile)
+	prefixes := getPaths(mmIgnorePrefixFile)
+	ignorEequalPaths := getPaths(mmIgnoreEqualFile)
+	syncEqualPaths := getPaths(mmSyncEqualFile)
 	rc, errc := s.SyncBase(ctx)
 
 	// if destination prefix is specified and remove destination prefix is true return error
@@ -177,12 +180,12 @@ func makeMirror(ctx context.Context, c *clientv3.Client, dc *clientv3.Client) er
 			continue
 		}
 		for _, kv := range r.Kvs {
-			if isPrefixIgnore(string(kv.Key), prefixes) == true {
+			if isEqual(string(kv.Key), syncEqualPaths) == true {
+				fmt.Printf("Sunc equal key: %s\n", string(kv.Key))
+			} else if isPrefix(string(kv.Key), prefixes) == true {
 				fmt.Printf("Ignore prefix key: %s\n", string(kv.Key))
 				continue
-			}
-
-			if isEqualIgnore(string(kv.Key), equalPaths) == true {
+			} else if isEqual(string(kv.Key), ignorEequalPaths) == true {
 				fmt.Printf("Ignore equal key: %s\n", string(kv.Key))
 				continue
 			}
@@ -227,13 +230,12 @@ func makeMirror(ctx context.Context, c *clientv3.Client, dc *clientv3.Client) er
 				}
 				ops = []clientv3.Op{}
 			}
-
-			if isPrefixIgnore(string(ev.Kv.Key), prefixes) == true {
+			if isEqual(string(ev.Kv.Key), syncEqualPaths) == true {
+				fmt.Printf("Sync equal key: %s\n", string(ev.Kv.Key))
+			} else if isPrefix(string(ev.Kv.Key), prefixes) == true {
 				fmt.Printf("Ignore key: %s\n", string(ev.Kv.Key))
 				continue
-			}
-
-			if isEqualIgnore(string(ev.Kv.Key), equalPaths) == true {
+			} else if isEqual(string(ev.Kv.Key), ignorEequalPaths) == true {
 				fmt.Printf("Ignore equal key: %s\n", string(ev.Kv.Key))
 				continue
 			}

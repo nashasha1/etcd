@@ -183,16 +183,16 @@ func makeMirror(ctx context.Context, c *clientv3.Client, dc *clientv3.Client) er
 			continue
 		}
 		for _, kv := range r.Kvs {
-			if isEqual(string(kv.Key), syncEqualPaths) == true {
-				fmt.Printf("Sync equal key: %s\n", string(kv.Key))
-			} else if isEqual(string(kv.Key), ignoreEqualPaths) {
+			if isEqual(string(kv.Key), ignoreEqualPaths) == true {
 				fmt.Printf("Ignore equal key: %s\n", string(kv.Key))
 				continue
-			} else if isPrefix(string(kv.Key), syncPrefixPaths) == true {
-				fmt.Printf("sync prefix key: %s\n", string(kv.Key))
+			} else if isEqual(string(kv.Key), syncEqualPaths) == true {
+				fmt.Printf("Sync equal key: %s\n", string(kv.Key))
 			} else if isPrefix(string(kv.Key), ignorePrefixPaths) == true {
 				fmt.Printf("Ignore prefix key: %s\n", string(kv.Key))
 				continue
+			} else if isPrefix(string(kv.Key), syncPrefixPaths) == true {
+				fmt.Printf("sync prefix key: %s\n", string(kv.Key))
 			} else {
 				fmt.Printf("Ignore path because it does not match any path. %s\n", string(kv.Key))
 				continue
@@ -238,16 +238,16 @@ func makeMirror(ctx context.Context, c *clientv3.Client, dc *clientv3.Client) er
 				}
 				ops = []clientv3.Op{}
 			}
-			if isEqual(string(ev.Kv.Key), syncEqualPaths) == true {
-				fmt.Printf("Sync equal key: %s\n", string(ev.Kv.Key))
-			} else if isEqual(string(ev.Kv.Key), ignoreEqualPaths) {
+			if isEqual(string(ev.Kv.Key), ignoreEqualPaths) == true {
 				fmt.Printf("Ignore equal key: %s\n", string(ev.Kv.Key))
 				continue
-			} else if isPrefix(string(ev.Kv.Key), syncPrefixPaths) == true {
-				fmt.Printf("sync prefix key: %s\n", string(ev.Kv.Key))
+			} else if isEqual(string(ev.Kv.Key), syncEqualPaths) == true {
+				fmt.Printf("Sync equal key: %s\n", string(ev.Kv.Key))
 			} else if isPrefix(string(ev.Kv.Key), ignorePrefixPaths) == true {
 				fmt.Printf("Ignore prefix key: %s\n", string(ev.Kv.Key))
 				continue
+			} else if isPrefix(string(ev.Kv.Key), syncPrefixPaths) == true {
+				fmt.Printf("sync prefix key: %s\n", string(ev.Kv.Key))
 			} else {
 				fmt.Printf("Ignore key because it does not contain any path. %s\n", string(ev.Kv.Key))
 				continue
